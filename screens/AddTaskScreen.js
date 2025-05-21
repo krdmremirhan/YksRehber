@@ -12,6 +12,8 @@ import {
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 import { Ionicons, FontAwesome5, MaterialIcons } from "@expo/vector-icons";
 import { getCategories } from "../utils/categoryStorage";
 import { ToastAndroid, Platform } from "react-native";
@@ -28,6 +30,24 @@ const renderIcon = (name = "pricetag", color = "#000", size = 20) => {
   }
 };
 
+const scheduleNotification = async (datetime, title) => {
+  if (!Device.isDevice) return;
+
+  const { status } = await Notifications.getPermissionsAsync();
+  if (status !== 'granted') {
+    await Notifications.requestPermissionsAsync();
+  }
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: "⏰ Görev Hatırlatıcısı",
+      body: `"${title}" görevini unutma!`,
+      sound: true,
+    },
+    trigger: datetime, // Date objesi
+  });
+};
+
 export default function AddTaskScreen() {
   const navigation = useNavigation();
   const route = useRoute();
@@ -40,10 +60,43 @@ export default function AddTaskScreen() {
   const [deadline, setDeadline] = useState(null);
   const [reminder, setReminder] = useState(null);
   const [showDeadlinePicker, setShowDeadlinePicker] = useState(false);
-  const [showReminderPicker, setShowReminderPicker] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [categories, setCategories] = useState([]);
   const [selectedCategoryName, setSelectedCategoryName] = useState(route.params?.selectedCategory || "Kişisel");
+  const [reminderDate, setReminderDate] = useState(new Date());
+  const [showReminderDatePicker, setShowReminderDatePicker] = useState(false);
+  const [showReminderTimePicker, setShowReminderTimePicker] = useState(false);
+
+  useEffect(() => {
+    if (enableReminder && reminder) {
+      setReminderDate(reminder);
+    }
+  }, [enableReminder]);
+
+  const openReminderPicker = () => {
+    setShowReminderDatePicker(true);
+  };
+
+  const handleReminderDateChange = (event, selectedDate) => {
+    setShowReminderDatePicker(false);
+    if (selectedDate) {
+      const updated = new Date(selectedDate);
+      updated.setHours(reminderDate.getHours());
+      updated.setMinutes(reminderDate.getMinutes());
+      setReminderDate(updated);
+      setShowReminderTimePicker(true);
+    }
+  };
+
+  const handleReminderTimeChange = (event, selectedTime) => {
+    setShowReminderTimePicker(false);
+    if (selectedTime) {
+      const updated = new Date(reminderDate);
+      updated.setHours(selectedTime.getHours());
+      updated.setMinutes(selectedTime.getMinutes());
+      setReminder(updated);
+    }
+  };
 
   useEffect(() => {
     const loadCategories = async () => {
@@ -55,42 +108,50 @@ export default function AddTaskScreen() {
 
   const selectedCategory = categories.find(c => c.name === selectedCategoryName);
 
-  const handleSave = async () => {
-    if (!title.trim()) {
-      Alert.alert("Uyarı", "Lütfen görev başlığı girin.");
-      return;
-    }
-    try {
-          const storedTasks = await AsyncStorage.getItem("tasks"); // ← Bu eklenmeli
-
-      let existing = [];
-      try {
-        existing = storedTasks ? JSON.parse(storedTasks) : [];
-      } catch (e) {
-        console.warn("JSON parse hatası:", e);
-      }
-
-      const newTask = {
-        title,
-        description,
-        category: selectedCategory?.name || "Genel",
-        categoryIconName: selectedCategory?.iconName,
-        categoryColor: selectedCategory?.color,
-        priority,
-        deadline: enableDeadline ? deadline : null,
-        reminder: enableReminder ? reminder : null,
-        isCompleted: false,
-      };
-      const updated = [...existing, newTask];
-      await AsyncStorage.setItem("tasks", JSON.stringify(updated));
-        if (Platform.OS === "android") {
-    ToastAndroid.show("Görev başarıyla eklendi", ToastAndroid.SHORT);
+ const handleSave = async () => {
+  if (!title.trim()) {
+    Alert.alert("Uyarı", "Lütfen görev başlığı girin.");
+    return;
   }
-      navigation.navigate("TodosScreen", { newTask });
-    } catch (err) {
-      console.error("Görev kaydedilemedi:", err);
+  try {
+    const storedTasks = await AsyncStorage.getItem("tasks");
+
+    let existing = [];
+    try {
+      existing = storedTasks ? JSON.parse(storedTasks) : [];
+    } catch (e) {
+      console.warn("JSON parse hatası:", e);
     }
-  };
+
+    const newTask = {
+      title,
+      description,
+      category: selectedCategory?.name || "Genel",
+      categoryIconName: selectedCategory?.iconName,
+      categoryColor: selectedCategory?.color,
+      priority,
+      deadline: enableDeadline ? deadline : null,
+      reminder: enableReminder ? reminder : null,
+      isCompleted: false,
+    };
+
+    const updated = [...existing, newTask];
+    await AsyncStorage.setItem("tasks", JSON.stringify(updated));
+
+    // 💥 BURASI ÖNEMLİ
+    if (enableReminder && reminder) {
+      await scheduleNotification(reminder, title);
+    }
+
+    if (Platform.OS === "android") {
+      ToastAndroid.show("Görev başarıyla eklendi", ToastAndroid.SHORT);
+    }
+    navigation.navigate("TodosScreen", { newTask });
+  } catch (err) {
+    console.error("Görev kaydedilemedi:", err);
+  }
+};
+
 
   const getPriorityStyle = (level) => {
     switch (level) {
@@ -118,7 +179,10 @@ export default function AddTaskScreen() {
 
       <Text style={styles.label}>Kategori</Text>
       <TouchableOpacity onPress={() => setShowCategoryDropdown(!showCategoryDropdown)} style={[styles.dropdownBox, { borderColor: selectedCategory?.color || "#e5e7eb" }]}>
-        <View style={[styles.categoryIcon, { backgroundColor: selectedCategory?.color || "#9ca3af" }]}> {renderIcon(selectedCategory?.iconName, "#fff", 16)} </View>
+        <View style={[styles.categoryIcon,
+           { backgroundColor: selectedCategory?.color || "#9ca3af" }]}> 
+            {renderIcon(selectedCategory?.iconName, "#fff", 16)}
+        </View>
         <Text style={[styles.dropdownText, { color: selectedCategory?.color || "#374151" }]}>{selectedCategory?.name || "Kategori Seç"}</Text>
         <Ionicons name={showCategoryDropdown ? "chevron-up" : "chevron-down"} size={20} color={selectedCategory?.color || "#6b7280"} style={{ marginLeft: "auto" }} />
       </TouchableOpacity>
@@ -127,8 +191,13 @@ export default function AddTaskScreen() {
         <View style={styles.dropdownList}>
           {categories.map((cat) => (
             <TouchableOpacity key={cat.name} onPress={() => { setSelectedCategoryName(cat.name); setShowCategoryDropdown(false); }} style={styles.dropdownItem}>
-              <View style={[styles.categoryIcon, { backgroundColor: cat.color }]}>{renderIcon(cat.iconName, "#fff", 16)}</View>
-              <Text style={{ color: "#1f2937", fontWeight: "500" }}>{cat.name}</Text>
+             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+  <Text style={[styles.dropdownText, { color: selectedCategory?.color || "#374151", marginRight: 6 }]}>
+    {selectedCategory?.name || "Kategori Seç"}
+  </Text>
+  {renderIcon(selectedCategory?.iconName, selectedCategory?.color || "#374151", 16)}
+</View>
+
             </TouchableOpacity>
           ))}
         </View>
@@ -153,7 +222,6 @@ export default function AddTaskScreen() {
 
       <Text style={styles.label}>Zaman Bilgileri</Text>
 
-      {/* Deadline */}
       <View style={styles.toggleRow}>
         <Text style={styles.toggleLabel}>📅 Son Tarih</Text>
         <Switch value={enableDeadline} onValueChange={(val) => { setEnableDeadline(val); if (val) setShowDeadlinePicker(true); }} />
@@ -171,7 +239,7 @@ export default function AddTaskScreen() {
         <DateTimePicker
           value={deadline || new Date()}
           mode="date"
-          display="default"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
           onChange={(event, selectedDate) => {
             setShowDeadlinePicker(false);
             if (selectedDate) {
@@ -181,30 +249,45 @@ export default function AddTaskScreen() {
         />
       )}
 
-      {/* Reminder */}
       <View style={styles.toggleRow}>
         <Text style={styles.toggleLabel}>🔔 Hatırlatıcı</Text>
-        <Switch value={enableReminder} onValueChange={(val) => { setEnableReminder(val); if (val) setShowReminderPicker(true); }} />
+        <Switch
+          value={enableReminder}
+          onValueChange={(val) => {
+            setEnableReminder(val);
+            if (val) openReminderPicker();
+          }}
+        />
       </View>
 
-
       {enableReminder && (
-        <TouchableOpacity onPress={() => setShowReminderPicker(true)}>
+        <TouchableOpacity onPress={openReminderPicker}>
           <Text style={styles.dateValue}>
-            {reminder instanceof Date ? `${reminder.toLocaleDateString("tr-TR")} ${reminder.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Saat seçilmedi"}
+            {reminder
+              ? `${reminder.toLocaleDateString("tr-TR")} ${reminder.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+              : "Saat seçilmedi"}
           </Text>
         </TouchableOpacity>
       )}
 
-
-      {showReminderPicker && (
+      {showReminderDatePicker && (
         <DateTimePicker
-          value={reminder || new Date()}
-          mode="datetime"
-          display="default"
-          onChange={(e, t) => { setShowReminderPicker(false); if (t) setReminder(t); }}
+          value={reminderDate}
+          mode="date"
+          display={Platform.select({ ios: "inline", android: "default" })}
+          onChange={handleReminderDateChange}
         />
       )}
+
+      {showReminderTimePicker && (
+        <DateTimePicker
+          value={reminderDate}
+          mode="time"
+          display={Platform.select({ ios: "spinner", android: "default" })}
+          onChange={handleReminderTimeChange}
+        />
+      )}
+
 
       <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
         <Text style={styles.saveButtonText}>✓ Görevi Kaydet</Text>

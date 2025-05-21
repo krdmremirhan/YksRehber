@@ -18,9 +18,8 @@ export const AppProvider = ({ children }) => {
     literature: { solved: 0, total: 40 },
   });
 
-  const [dataLoaded, setDataLoaded] = useState(false); // 🔐 AsyncStorage tam yüklendi mi?
+  const [dataLoaded, setDataLoaded] = useState(false); 
 
-  // ⏬ Verileri geri yükle
   useEffect(() => {
     const loadStoredValues = async () => {
       try {

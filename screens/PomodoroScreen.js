@@ -136,15 +136,15 @@ export default function PomodoroScreen() {
             cy="125"
             r="100"
             strokeWidth="15"
-            stroke="#e5e7eb"       // dış çember rengi (açık gri)
-            fill="none"            // siyahlığı engeller
+            stroke="#e5e7eb"       
+            fill="none"
           />
           <Circle
             cx="125"
             cy="125"
             r="100"
             strokeWidth="15"
-            stroke={themeColor}    // tema rengine göre ilerleme çemberi
+            stroke={themeColor}
             fill="none"            // mutlaka olmalı!
             strokeDasharray="628"
             strokeDashoffset={628 - (628 * progress) / 100}

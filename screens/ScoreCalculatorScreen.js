@@ -158,16 +158,15 @@ const ScoreCalculatorScreen = () => {
   );
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: themeColor + "10" }}>
+    <View style={styles.container}>
+  <View style={styles.headerRow}>
+    <TouchableOpacity onPress={() => navigation.goBack()}>
+      <Ionicons name="chevron-back" size={24} color={themeColor} />
+    </TouchableOpacity>
+    <Text style={styles.headerTitle}>YKS Puan Hesaplama</Text>
+    <View style={{ width: 24 }} />
+  </View>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="chevron-back" size={24} color={themeColor} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>YKS Puan Hesaplama</Text>
-          <View style={{ width: 24 }} />
-        </View>
-
         <View style={styles.card}>
           <Text style={styles.cardTitle}>🎓 Diploma ve Yerleşme</Text>
           <Text style={styles.label}>Diploma Notu</Text>
@@ -294,12 +293,19 @@ const ScoreCalculatorScreen = () => {
 
 
       </ScrollView>
-    </SafeAreaView>
+      </View>
+
   );
 };
 
 function getStyles(themeColor) {
   return StyleSheet.create({
+    container: {
+  flex: 1,
+  paddingTop: 40,
+  paddingHorizontal: 16,
+      paddingTop: 40,
+},
     headerRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',

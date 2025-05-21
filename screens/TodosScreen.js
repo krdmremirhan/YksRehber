@@ -8,12 +8,14 @@ import {
   TextInput,
 } from "react-native";
 import { Platform } from "react-native";
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation, useFocusEffect, useRoute } from "@react-navigation/native";
 import { useAppContext } from "../context/AppContext";
 import uuid from 'react-native-uuid';
+import { Dimensions } from "react-native";
 
 const getDefaultCategories = () => ([
   { id: uuid.v4(), name: "Kişisel", iconName: "person", color: "#0d9488" },
@@ -41,11 +43,14 @@ const getPriorityStyle = (level) => {
   }
 };
 
+
 const renderIcon = (name, color = "#fff", size = 18) => (
   <Ionicons name={name || "pricetag"} size={size} color={color} />
 );
 
 export default function TodosScreen() {
+  const { width, height } = Dimensions.get("window");
+
   const navigation = useNavigation();
   const route = useRoute();
   const { themeColor } = useAppContext();
@@ -77,24 +82,29 @@ export default function TodosScreen() {
   };
 
   const loadTasks = async () => {
-    try {
-      const storedTasks = await AsyncStorage.getItem("tasks");
-      const parsedTasks = storedTasks ? JSON.parse(storedTasks) : [];
+  try {
+    const storedTasks = await AsyncStorage.getItem("tasks");
+    let parsedTasks = storedTasks ? JSON.parse(storedTasks) : [];
 
-      const safeTasks = parsedTasks.map((task) => {
-        if (!task.id) {
-          return { ...task, id: uuid.v4(), };
-        }
-        return task;
-      });
+    // Yalnızca id'si olmayanlara uuid ata
+    parsedTasks = parsedTasks.map((task) => {
+      if (!task.id) {
+        task.id = uuid.v4();
+      }
+      if (typeof task.isCompleted !== 'boolean') {
+        task.isCompleted = false;
+      }
+      return task;
+    });
 
+    // Güncellenen veriyi kaydet (bir kerelik temizlik için)
+    await AsyncStorage.setItem("tasks", JSON.stringify(parsedTasks));
+    setTasks(parsedTasks);
+  } catch (error) {
+    console.error("Görev yükleme hatası:", error);
+  }
+};
 
-      setTasks(safeTasks);
-
-    } catch (error) {
-      console.error("Görev yükleme hatası:", error);
-    }
-  };
 
   const handleDeleteTask = async (taskId) => {
     const updated = tasks.filter((task) => task.id !== taskId);
@@ -113,9 +123,17 @@ export default function TodosScreen() {
     const updated = tasks.map((task) =>
       task.id === taskId ? { ...task, isCompleted: !task.isCompleted } : task
     );
+
     await AsyncStorage.setItem("tasks", JSON.stringify(updated));
     setTasks(updated);
+
+    const toggledTask = updated.find((t) => t.id === taskId);
+
+   
+
   };
+
+
 
   const filteredTasks = tasks.filter((task) => {
     const matchCategory =
@@ -123,11 +141,11 @@ export default function TodosScreen() {
       (task.category?.toLowerCase().trim() === selectedCategory.toLowerCase().trim());
 
     const matchCompletion =
-      viewFilter === "Tümü"
-        ? true
-        : viewFilter === "Aktif"
-          ? !task.isCompleted
-          : task.isCompleted;
+      viewMode === "active"
+        ? !task.isCompleted
+        : viewMode === "completed"
+          ? task.isCompleted
+          : true;
 
     const matchSearch =
       task.title.toLowerCase().includes(searchText.toLowerCase()) ||
@@ -135,6 +153,8 @@ export default function TodosScreen() {
 
     return matchCategory && matchCompletion && matchSearch;
   });
+
+
 
 
   const allCategories = [
@@ -145,15 +165,31 @@ export default function TodosScreen() {
 
   const renderTaskCard = (task) => (
     <View key={task.id.toString()} style={styles.taskCard}>
-      <TouchableOpacity
-        onPress={() => toggleTaskCompletion(task.id)}
-        style={[
-          styles.circle,
-          task.isCompleted && { backgroundColor: "#7c3aed", borderColor: "#7c3aed" },
-        ]}
-      >
-        {task.isCompleted && <Ionicons name="checkmark" size={16} color="#fff" />}
-      </TouchableOpacity>
+      <View style={{ marginRight: 10 }}>
+  <TouchableOpacity
+    onPress={() => {
+      console.log("Tıklandı:", task.title); // Test için
+      toggleTaskCompletion(task.id);
+    }}
+    activeOpacity={0.7}
+    style={[
+      {
+        width: 24,
+        height: 24,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: task.isCompleted ? "#7c3aed" : "#d1d5db",
+        backgroundColor: task.isCompleted ? "#7c3aed" : "transparent",
+        justifyContent: "center",
+        alignItems: "center",
+      },
+    ]}
+    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+  >
+    {task.isCompleted && <Ionicons name="checkmark" size={14} color="#fff" />}
+  </TouchableOpacity>
+</View>
+
 
       <View style={{ flex: 1 }}>
         <Text
@@ -197,20 +233,20 @@ export default function TodosScreen() {
   );
 
   return (
-    <View style={styles.container}>
-      {/* Başlık */}
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-                  <Ionicons name="chevron-back" size={24} color={themeColor} />
+        <TouchableOpacity onPress={() => navigation.goBack()} style={{ width: 24 }}>
+          <Ionicons name="chevron-back" size={24} color={themeColor} />
         </TouchableOpacity>
-        <Text style={styles.pageTitle}>Yapılacaklar</Text>
-        <TouchableOpacity onPress={() => setIsSearchVisible(!isSearchVisible)}>
+
+        <Text style={styles.headerTitle}>Yapılacaklar</Text>
+
+        <TouchableOpacity onPress={() => setIsSearchVisible(!isSearchVisible)} style={{ width: 24, alignItems: 'flex-end' }}>
           <Ionicons name="search" size={22} color={themeColor} />
         </TouchableOpacity>
-
       </View>
 
-      {/* Kategoriler */}
+
       <View style={styles.categoryTopRow}>
         <Text style={styles.label}>Kategoriler</Text>
         <TouchableOpacity onPress={() => navigation.navigate("CategoryManagementScreen")}>
@@ -236,7 +272,9 @@ export default function TodosScreen() {
             onPress={() => setSelectedCategory(cat.name)}
           >
             <View style={[styles.categoryIcon, { backgroundColor: cat.color }]}>
-              {renderIcon(cat.iconName)}
+<Text>
+  {renderIcon("pricetag-outline")}
+</Text>
             </View>
             <Text style={[styles.categoryText, selectedCategory === cat.name && { color: cat.color }]}>
               {cat.name === "Tümü" ? "Tüm" : cat.name}
@@ -256,14 +294,28 @@ export default function TodosScreen() {
 
       </ScrollView>
       {isSearchVisible && (
-        <View style={{ flexDirection: "row", alignItems: "center", marginVertical: 6 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            paddingVertical: 6,
+            paddingHorizontal: 4,
+            backgroundColor: "#f3f4f6",
+            borderRadius: 12,
+            marginVertical: 8,
+          }}
+        >
+          <Ionicons name="search" size={20} color="#6b7280" style={{ marginLeft: 4 }} />
 
-          <Ionicons name="search" size={20} color="#999" style={{ marginRight: 8 }} />
           <TextInput
             placeholder="Görevlerde ara..."
             style={{
               flex: 1,
-              fontSize: 16, // ekstra: daha okunaklı
+              fontSize: 15,
+              paddingVertical: 4,
+              paddingHorizontal: 6,
+              color: "#111827",
             }}
             value={searchText}
             onChangeText={(text) => setSearchText(text)}
@@ -282,7 +334,7 @@ export default function TodosScreen() {
               }}
             >
               <Ionicons name="eye" size={16} color="#3b82f6" style={{ marginRight: 6 }} />
-              <Text style={{ color: "#3b82f6" }}>{viewFilter}</Text>
+              <Text style={{ color: "#3b82f6", fontSize: 13 }}>{viewFilter}</Text>
             </TouchableOpacity>
 
             {filterMenuVisible && (
@@ -302,28 +354,44 @@ export default function TodosScreen() {
                   zIndex: 10,
                 }}
               >
-                {["Tümü", "Aktif", "biten"].map((option) => (
+                {["Tümü", "Aktif", "Tamamlanan"].map((option) => (
                   <TouchableOpacity
                     key={option}
                     onPress={() => {
                       setViewFilter(option);
                       setFilterMenuVisible(false);
+
+                      // Seçilen filtreye göre viewMode'u ayarla
+                      if (option === "Tümü") {
+                        setViewMode("all");
+                      } else if (option === "Aktif") {
+                        setViewMode("active");
+                      } else if (option === "Tamamlanan") {
+                        setViewMode("completed");
+                      }
                     }}
                     style={{
                       paddingVertical: 6,
                       paddingHorizontal: 12,
                     }}
                   >
-                    <Text style={{ color: viewFilter === option ? "#3b82f6" : "#374151" }}>
+                    <Text
+                      style={{
+                        color: viewFilter === option ? "#3b82f6" : "#374151",
+                        fontSize: 13,
+                      }}
+                    >
                       {option}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
             )}
+
           </View>
         </View>
       )}
+
 
 
 
@@ -340,7 +408,6 @@ export default function TodosScreen() {
       </View>
 
 
-      {/* Sekmeler */}
       <View style={styles.toggleTabs}>
         <TouchableOpacity
           onPress={() => setViewMode("active")}
@@ -356,7 +423,6 @@ export default function TodosScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Görev Listesi */}
       <ScrollView style={styles.taskScrollView}>
         {filteredTasks.length === 0 ? (
           <Text style={styles.noTaskText}>Bu kategori ve duruma ait görev bulunamadı.</Text>
@@ -371,97 +437,86 @@ export default function TodosScreen() {
 
       </ScrollView>
 
-      {/* Ekle Butonu */}
+    </SafeAreaView>
 
-    </View>
   );
 }
 
 
 function getStyles(themeColor) {
+  const { width } = Dimensions.get("window");
+
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: Platform.OS === "ios" ? 12 : 8,
-      paddingTop: 14,
-      paddingHorizontal: 12,
+      backgroundColor: "#f9fafb",
+      paddingHorizontal: width * 0.04,
+      paddingTop: 0,
     },
+
     headerRow: {
       flexDirection: "row",
-      justifyContent: "space-between",
       alignItems: "center",
-      marginBottom:5,
-      marginTop:11,
+      justifyContent: "space-between",
+      marginTop: 0,
+      marginBottom: 16,
+      paddingHorizontal: 4,
     },
+
+
+    headerTitle: {
+      flex: 1,
+      textAlign: "center",
+      fontSize: 18,
+      fontWeight: "bold",
+      color: themeColor,
+    },
+
+
     pageTitle: {
-      fontSize: 20,
+      fontSize: 22,
       fontWeight: "bold",
       color: themeColor,
     },
     categoryTopRow: {
       flexDirection: "row",
       justifyContent: "space-between",
-      marginTop: 2,
-       marginBottom:5,
-
+      marginVertical: 6,
     },
     label: {
       fontSize: 16,
       fontWeight: "600",
-      color: themeColor
+      color: themeColor,
     },
     categoryHeaderRow: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      marginTop: 8,
-      marginBottom: 8,
+      marginVertical: 10,
       paddingHorizontal: 4,
     },
-    deleteButton: {
-      marginLeft: 8,
-      padding: 6,
-    },
-    deleteButton: {
-      position: "absolute",
-      top: 8,
-      right: 8,
-      padding: 4,
-    },
-
     categoryTitle: {
       fontSize: 18,
       fontWeight: "bold",
       color: themeColor,
     },
-
     miniAddButton: {
       flexDirection: "row",
       alignItems: "center",
       backgroundColor: themeColor,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: 16,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 20,
     },
-
     miniAddButtonText: {
       color: "#fff",
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: "500",
-      marginLeft: 4,
+      marginLeft: 6,
     },
-
     manageButton: {
       fontSize: 14,
       color: themeColor,
-    },
-    categoryRow: {
-      alignItems: "center",
-      paddingVertical: 0,
-      paddingLeft: 4,
-      paddingRight: 4,
-      marginBottom: 6,
-      marginTop: 4,
     },
     categoryButton: {
       alignItems: "center",
@@ -469,8 +524,8 @@ function getStyles(themeColor) {
       borderColor: "transparent",
       borderRadius: 12,
       paddingHorizontal: 8,
-      paddingVertical: 2,
-      minWidth: 60,
+      paddingVertical: 4,
+      minWidth: width * 0.18,
     },
     categoryIcon: {
       width: 36,
@@ -487,12 +542,10 @@ function getStyles(themeColor) {
     toggleTabs: {
       flexDirection: "row",
       justifyContent: "center",
-      marginTop: 4, // 👈 Evet sadece buraya ver
-      marginBottom: 2,
+      marginVertical: 6,
     },
-
     toggleTab: {
-      paddingVertical: 6,
+      paddingVertical: 8,
       paddingHorizontal: 16,
       marginHorizontal: 6,
       borderRadius: 16,
@@ -503,23 +556,27 @@ function getStyles(themeColor) {
       color: "#374151",
     },
     activeTab: {
-      backgroundColor: themeColor
+      backgroundColor: themeColor,
     },
     activeText: {
       color: "#fff",
     },
     taskScrollView: {
       flex: 1,
-      marginTop: 0,
       marginBottom: 6,
     },
     taskCard: {
       backgroundColor: "#fff",
       padding: 12,
-      marginBottom: 6,
+      marginBottom: 10,
       borderRadius: 12,
       flexDirection: "row",
       alignItems: "center",
+      elevation: 2,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
     },
     circle: {
       width: 24,
@@ -540,7 +597,12 @@ function getStyles(themeColor) {
       fontSize: 13,
       color: "#6b7280",
     },
-
+    deleteButton: {
+      position: "absolute",
+      top: 8,
+      right: 8,
+      padding: 4,
+    },
     noTaskText: {
       textAlign: "center",
       color: "#6b7280",
@@ -551,6 +613,7 @@ function getStyles(themeColor) {
       fontWeight: "bold",
       marginBottom: 8,
       color: themeColor,
+      paddingHorizontal: 4,
     },
   });
 }
